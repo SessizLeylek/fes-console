@@ -33,8 +33,8 @@ update_buffer24_from_buffer4 :: proc(buffer4 : []u8)
     for i in 0..<(SCREEN_WIDTH*SCREEN_HEIGHT/2)
     {
         two_pixels := buffer4[i]
-        first_pixel4 := (two_pixels << 4) >> 4
-        second_pixel4 := two_pixels >> 4
+        first_pixel4 := two_pixels >> 4
+        second_pixel4 := (two_pixels << 4) >> 4
 
         first_color := COLOR_TABLE[first_pixel4]
         second_color := COLOR_TABLE[second_pixel4]
@@ -55,17 +55,19 @@ update_buffer24_from_buffer4 :: proc(buffer4 : []u8)
 
 window_init :: proc()
 {
-    rl.InitWindow(1000, 750, "FES")
+    rl.InitWindow(1024, 640, "FES")
 
     temp_img := rl.Image {&screen_buffer24, SCREEN_WIDTH, SCREEN_HEIGHT, 1, .UNCOMPRESSED_R8G8B8}
     screen_texture = rl.LoadTextureFromImage(temp_img)
+
+    rl.SetTargetFPS(50)
 }
 
 window_update :: proc() -> bool
 {
     rl.BeginDrawing()
 
-    rl.DrawTextureEx(screen_texture, {0, 0}, 0, 3, rl.WHITE)
+    rl.DrawTextureEx(screen_texture, {128, 32}, 0, 3, rl.WHITE)
 
     rl.EndDrawing()
 
