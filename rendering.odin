@@ -60,7 +60,7 @@ window_init :: proc()
     temp_img := rl.Image {&screen_buffer24, SCREEN_WIDTH, SCREEN_HEIGHT, 1, .UNCOMPRESSED_R8G8B8}
     screen_texture = rl.LoadTextureFromImage(temp_img)
 
-    rl.SetTargetFPS(50)
+    rl.SetTargetFPS(25)
 }
 
 window_update :: proc() -> bool

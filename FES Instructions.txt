@@ -49,33 +49,33 @@ r    : register
 -123 : negative decimal numbers
 b101 : binary numbers
 xABC : hexadecimal numbers
-*123 : dereferencing
-:ABC : defining constant
-.ABC : using the constant
-+ABC : defining macro (can't have a name of an existing instruction)
-(abc): macro scope
-,0   : macro parameter
+.123 : dereferencing
+;ABC : defining constant
+,ABC : using the constant
+=ABC : defining macro (can't have a name of an existing instruction)
+[abc]: macro scope
+m0   : macro parameter
 /ABC : commenting
-&    : next instruction address
-%16  : give x bytes of memory address
-"ABC": text definiton, returns the address
+ln   : current line number
+a16  : give x bytes of memory address
+'ABC': text definiton, returns the address
 
 
 #Using instructions and macros:
 
-	:temp %2
-	:hello_world "Hello World!\n"
+	;temp a2
+	;hello_world 'Hello World!'
 
-	+inc 1 / increases the number on place
-	(
-		put .temp
-		add *,0 1
-		put ,0
-		get .temp
-	)
+	=inc 1 / increases the number on place
+	[
+		put ,temp
+		add .m0 1
+		put m0
+		get ,temp
+	]
 
-	wrt .hello_world
-	wrt "A great example!"
+	wrt ,hello_world
+	wrt 'A great example!'
 	
 	set 100
 	put xFFFFFFFFFFFFFFF0
@@ -83,8 +83,8 @@ xABC : hexadecimal numbers
 	/ at this moment the value on the register is still 100
 	/ while the value on the address xFFFFFFFFFFFFFFF0 101
 	
-	:my_function &
+	;my_function ln
 	inc xFFFFFFFFFFFFFFF0
-	jmp .my_function
+	jmp ,my_function
 	/ with this, we can save the address of the "inc" instruction to a constant
 	/ then use it with jmp instruction, increasing the value infinitely
