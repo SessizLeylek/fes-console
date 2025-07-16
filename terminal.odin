@@ -89,18 +89,18 @@ terminal_reset_cell_color :: proc(x, y : int)
 
 terminal_invert_cell_color :: proc(x, y : int)
 {
-    old_color := terminal_data.char_colors[x][y]
+    old_color := terminal_data.char_colors[y][x]
     new_color := (old_color >> 4) + (old_color << 4)
     terminal_data.char_colors[y][x] = new_color
 
     terminal_data.should_refresh = true
 }
 
-terminal_cursor_blink :: proc(time : f64, v : $T)
+terminal_cursor_blink :: proc(v : $T)
 {
-    if time > v.last_cursor_blink + 0.5
+    if get_time() > v.last_cursor_blink + 0.5
     {
-        v.last_cursor_blink = time
+        v.last_cursor_blink = get_time()
         terminal_invert_cell_color(v.cursor.x, v.cursor.y)
     }
 }
@@ -133,15 +133,15 @@ terminal_scroll_up :: proc()
     terminal_clear_line(TERMINAL_HEIGHT - 1)
 }
 
-terminal_update :: proc(time : f64, pressed_key : i32)
+terminal_update :: proc()
 {
     
     switch &v in terminal_data.state
     {
         case TerminalEntry:
-            terminal_update_entry(time, pressed_key, &v)
+            terminal_update_entry(&v)
         case TerminalCodeEditor:
-            terminal_update_code_editor(time, pressed_key, &v)
+            terminal_update_code_editor(&v)
         case TerminalMemoryEditor:
     }
 
@@ -183,23 +183,21 @@ get_command :: proc(char_array : []u8) -> TerminalCommand
     first_null := strings.index_byte(word, 0)
     word_trimmed := strings.trim_space(word[:first_null])
 
-    printfln("%v %v", word_trimmed, len(word_trimmed))
-
     defer delete(word)
 
-    if strings.compare(word_trimmed, "HELP") == 0 do return .Help
-    if strings.compare(word_trimmed, "CODE") == 0 do return .Code
-    if strings.compare(word_trimmed, "MEMEDIT") == 0 do return .MemEdit
-    if strings.compare(word_trimmed, "COMPILE") == 0 do return .Compile
-    if strings.compare(word_trimmed, "SAVE") == 0 do return .Save
-    if strings.compare(word_trimmed, "LOAD") == 0 do return .Load
-    if strings.compare(word_trimmed, "START") == 0 do return .Start
-    if strings.compare(word_trimmed, "COLOR") == 0 do return .Color
+    if strings.equal_fold(word_trimmed, "HELP") do return .Help
+    if strings.equal_fold(word_trimmed, "CODE") do return .Code
+    if strings.equal_fold(word_trimmed, "MEMEDIT") do return .MemEdit
+    if strings.equal_fold(word_trimmed, "COMPILE") do return .Compile
+    if strings.equal_fold(word_trimmed, "SAVE") do return .Save
+    if strings.equal_fold(word_trimmed, "LOAD") do return .Load
+    if strings.equal_fold(word_trimmed, "START") do return .Start
+    if strings.equal_fold(word_trimmed, "COLOR") do return .Color
 
     return .None
 }
 
-terminal_update_entry :: proc(time : f64, pressed_key : i32, v : ^TerminalEntry)
+terminal_update_entry :: proc(v : ^TerminalEntry)
 {
     if !v.is_initted
     {
@@ -222,7 +220,7 @@ terminal_update_entry :: proc(time : f64, pressed_key : i32, v : ^TerminalEntry)
     }
 
     // Cursor blink
-    terminal_cursor_blink(time, v)
+    terminal_cursor_blink(v)
 
     // Letter typing
     if new_char := get_key_letter(); new_char != 0 && v.cursor.x < TERMINAL_WIDTH - 1
@@ -231,12 +229,10 @@ terminal_update_entry :: proc(time : f64, pressed_key : i32, v : ^TerminalEntry)
         terminal_data.chars[v.cursor.y][v.cursor.x] = new_char
 
         v.cursor.x += 1
-
     }
 
     // Deleting letter
-    BACKSPACE :: 259
-    if pressed_key == BACKSPACE
+    if get_key_pressed() == .BACKSPACE
     {
         terminal_reset_cell_color(v.cursor.x, v.cursor.y)
 
@@ -251,8 +247,7 @@ terminal_update_entry :: proc(time : f64, pressed_key : i32, v : ^TerminalEntry)
     }
 
     // Submitting command
-    ENTER :: 257
-    if pressed_key == ENTER
+    if get_key_pressed() == .ENTER
     {
         terminal_reset_cell_color(v.cursor.x, v.cursor.y)
 
@@ -308,8 +303,9 @@ terminal_code_remove :: proc(x, y : int)
     terminal_code_shift_buffer(x, y, false)
 }
 
-terminal_update_code_editor :: proc(time : f64, pressed_key : i32, codeEditor : ^TerminalCodeEditor)
+terminal_update_code_editor :: proc(codeEditor : ^TerminalCodeEditor)
 {
+
     empty_line : [64]u8
     if !codeEditor.is_initted
     {
@@ -324,7 +320,7 @@ terminal_update_code_editor :: proc(time : f64, pressed_key : i32, codeEditor : 
     }
 
     // Cursor blink
-    terminal_cursor_blink(time, codeEditor)
+    terminal_cursor_blink(codeEditor)
 
     // Letter typing
     if new_char := get_key_letter(); new_char != 0 && codeEditor.cursor.x < 64
@@ -332,11 +328,11 @@ terminal_update_code_editor :: proc(time : f64, pressed_key : i32, codeEditor : 
         terminal_reset_cell_color(codeEditor.cursor.x, codeEditor.cursor.y)
 
         terminal_code_insert(codeEditor.cursor.x, codeEditor.cursor.y, new_char)
+        codeEditor.cursor.x += 1
     }
 
     // Deleting letter
-    BACKSPACE :: 259
-    if get_key_pressed() == BACKSPACE
+    if get_key_pressed() == .BACKSPACE
     {
         terminal_reset_cell_color(codeEditor.cursor.x, codeEditor.cursor.y)
 
@@ -351,32 +347,28 @@ terminal_update_code_editor :: proc(time : f64, pressed_key : i32, codeEditor : 
     }
 
     // New line
-    ENTER :: 257
-    if get_key_pressed() == ENTER
+    if get_key_pressed() == .ENTER
     {
         inject_at(&terminal_data.code, codeEditor.cursor.y, empty_line)
         codeEditor.cursor.y += 1
     }
 
     // Move Cursor
-    RIGHT :: 262
-    LEFT :: 263
-    DOWN :: 264
-    UP :: 265
-    if get_key_pressed() == RIGHT
+    if get_key_pressed() == .RIGHT
     {
         if codeEditor.cursor.x < CODELINE_SIZE do codeEditor.cursor.x += 1
     }
-    else if get_key_pressed() == LEFT
+    else if get_key_pressed() == .LEFT
     {
         if codeEditor.cursor.x > 0 do codeEditor.cursor.x -= 1
     }
-    else if get_key_pressed() == DOWN
+    else if get_key_pressed() == .DOWN
     {
         if codeEditor.cursor.y < len(terminal_data.code) do codeEditor.cursor.y += 1
     }
-    else if get_key_pressed() == UP
+    else if get_key_pressed() == .UP
     {
         if codeEditor.cursor.y > 0 do codeEditor.cursor.y -= 1
     }
+
 }

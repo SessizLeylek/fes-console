@@ -12,7 +12,7 @@ main :: proc()
 
     for window_update()
     {
-        terminal_update(get_time(), get_key_pressed())
+        terminal_update()
     }
 
     window_destroy()
