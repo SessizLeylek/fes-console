@@ -1,21 +1,25 @@
 package console
 
+import "core:terminal"
 import "core:strings"
 
+CODELINE_SIZE :: 64
 TERMINAL_WIDTH :: SCREEN_WIDTH / CHARSIZE
 TERMINAL_HEIGHT :: SCREEN_HEIGHT / CHARSIZE
 
 TerminalEntry :: struct
 {
     is_initted : bool,
-    cursor_x, cursor_y : int,
-    line_text : [TERMINAL_WIDTH]u8,
+    cursor : [2]int,
     last_cursor_blink : f64,
 }
 
 TerminalCodeEditor :: struct
 {
-
+    is_initted : bool,
+    cursor : [2]int,
+    top_left_position : [2]int,
+    last_cursor_blink : f64,
 }
 
 TerminalMemoryEditor :: struct
@@ -25,14 +29,22 @@ TerminalMemoryEditor :: struct
 
 TerminalData :: struct
 {
+    should_refresh : bool,
     color : u8,
-    chars : [TERMINAL_WIDTH][TERMINAL_HEIGHT]u8,
-    char_colors : [TERMINAL_WIDTH][TERMINAL_HEIGHT]u8,
+    chars : [TERMINAL_HEIGHT][TERMINAL_WIDTH]u8,
+    char_colors : [TERMINAL_HEIGHT][TERMINAL_WIDTH]u8,
     state : union {
         TerminalEntry,
         TerminalCodeEditor,
         TerminalMemoryEditor,
-    }
+    },
+    code : [dynamic][CODELINE_SIZE]u8,
+}
+
+INITIAL_TERMINAL_DATA := TerminalData{
+    should_refresh = true,
+    color = 15,
+    state = TerminalEntry {},
 }
 
 terminal_data : TerminalData
@@ -63,29 +75,41 @@ terminal_draw_all :: proc()
     {
         for j in 0..<TERMINAL_HEIGHT
         {
-            terminal_draw_cell(i, j, terminal_data.chars[i][j], terminal_data.char_colors[i][j])
+            terminal_draw_cell(i, j, terminal_data.chars[j][i], terminal_data.char_colors[j][i])
         }
     }
 }
 
 terminal_reset_cell_color :: proc(x, y : int)
 {
-    terminal_data.char_colors[x][y] = terminal_data.color
+    terminal_data.char_colors[y][x] = terminal_data.color
+
+    terminal_data.should_refresh = true
 }
 
 terminal_invert_cell_color :: proc(x, y : int)
 {
     old_color := terminal_data.char_colors[x][y]
     new_color := (old_color >> 4) + (old_color << 4)
-    terminal_data.char_colors[x][y] = new_color
+    terminal_data.char_colors[y][x] = new_color
+
+    terminal_data.should_refresh = true
+}
+
+terminal_cursor_blink :: proc(time : f64, v : $T)
+{
+    if time > v.last_cursor_blink + 0.5
+    {
+        v.last_cursor_blink = time
+        terminal_invert_cell_color(v.cursor.x, v.cursor.y)
+    }
 }
 
 terminal_clear_line :: proc(line_number : int)
 {
-    for i in 0..<TERMINAL_WIDTH
-    {
-        terminal_data.chars[i][line_number] = 0
-    }
+    terminal_data.chars[line_number] = 0
+
+    terminal_data.should_refresh = true
 }
 
 terminal_scroll_up :: proc()
@@ -94,8 +118,8 @@ terminal_scroll_up :: proc()
     {
         for j in 0..<(TERMINAL_HEIGHT - 1)
         {
-            terminal_data.chars[i][j] = terminal_data.chars[i][j + 1]
-            terminal_data.char_colors[i][j] = terminal_data.char_colors[i][j + 1]
+            terminal_data.chars[j][i] = terminal_data.chars[j + 1][i]
+            terminal_data.char_colors[j][i] = terminal_data.char_colors[j + 1][i]
 
         }
     }
@@ -103,7 +127,7 @@ terminal_scroll_up :: proc()
     #partial switch &v in terminal_data.state
     {
         case TerminalEntry:
-            if v.cursor_y > 0 do v.cursor_y -= 1
+            if v.cursor.y > 0 do v.cursor.y -= 1
     }
 
     terminal_clear_line(TERMINAL_HEIGHT - 1)
@@ -117,28 +141,36 @@ terminal_update :: proc(time : f64, pressed_key : i32)
         case TerminalEntry:
             terminal_update_entry(time, pressed_key, &v)
         case TerminalCodeEditor:
+            terminal_update_code_editor(time, pressed_key, &v)
         case TerminalMemoryEditor:
     }
 
-    terminal_draw_all()
-    update_buffer24_from_buffer4(console_get_video_buffer())
+    if terminal_data.should_refresh
+    {
+    	terminal_data.should_refresh = false
+    	
+		terminal_draw_all()
+    	update_buffer24_from_buffer4(console_get_video_buffer())    	
+    }
+
 }
 
 terminal_print :: proc(v : ^TerminalEntry, text : string)
 {
-    terminal_reset_cell_color(v.cursor_x, v.cursor_y)
-    terminal_clear_line(v.cursor_y)
+    terminal_reset_cell_color(v.cursor.x, v.cursor.y)
+    terminal_clear_line(v.cursor.y)
 
     for i in 0..<min(len(text), TERMINAL_WIDTH)
     {
-        terminal_data.chars[i][v.cursor_y] = text[i]
+        terminal_data.chars[v.cursor.y][i] = text[i]
     }
 
-    v.cursor_x = 0
-    v.cursor_y += 1
-    v.line_text = 0
+    v.cursor.x = 0
+    v.cursor.y += 1
     
-    if(v.cursor_y == TERMINAL_HEIGHT) do terminal_scroll_up()
+    if(v.cursor.y == TERMINAL_HEIGHT) do terminal_scroll_up()
+
+    terminal_data.should_refresh = true
 }
 
 TerminalCommand :: enum {
@@ -181,32 +213,24 @@ terminal_update_entry :: proc(time : f64, pressed_key : i32, v : ^TerminalEntry)
     }
 
     // Put command symbol
-    if v.cursor_x == 0
+    if v.cursor.x == 0
     {
-        terminal_reset_cell_color(v.cursor_x, v.cursor_y)
-        terminal_data.chars[v.cursor_x][v.cursor_y] = '>'
+        terminal_reset_cell_color(v.cursor.x, v.cursor.y)
+        terminal_data.chars[v.cursor.y][0] = '>'
 
-        v.line_text[v.cursor_x] = '>'
-        v.cursor_x = 1
+        v.cursor.x = 1
     }
 
     // Cursor blink
-    if time > v.last_cursor_blink + 0.5
-    {
-        v.last_cursor_blink = time
-        terminal_invert_cell_color(v.cursor_x, v.cursor_y)
-    }
+    terminal_cursor_blink(time, v)
 
     // Letter typing
-    if pressed_key > 31 && pressed_key < 127 && v.cursor_x < TERMINAL_WIDTH - 1
+    if new_char := get_key_letter(); new_char != 0 && v.cursor.x < TERMINAL_WIDTH - 1
     {
-        new_char := u8(pressed_key)
+        terminal_reset_cell_color(v.cursor.x, v.cursor.y)
+        terminal_data.chars[v.cursor.y][v.cursor.x] = new_char
 
-        terminal_reset_cell_color(v.cursor_x, v.cursor_y)
-        terminal_data.chars[v.cursor_x][v.cursor_y] = new_char
-
-        v.line_text[v.cursor_x] = new_char
-        v.cursor_x += 1
+        v.cursor.x += 1
 
     }
 
@@ -214,26 +238,25 @@ terminal_update_entry :: proc(time : f64, pressed_key : i32, v : ^TerminalEntry)
     BACKSPACE :: 259
     if pressed_key == BACKSPACE
     {
-        terminal_reset_cell_color(v.cursor_x, v.cursor_y)
+        terminal_reset_cell_color(v.cursor.x, v.cursor.y)
 
-        v.cursor_x -= 1
+        v.cursor.x -= 1
 
-        if v.cursor_x == -1
+        if v.cursor.x == -1
         {
-            v.cursor_x = 0
+            v.cursor.x = 0
         }
 
-        v.line_text[v.cursor_x] = 0
-        terminal_data.chars[v.cursor_x][v.cursor_y] = 0
+        terminal_data.chars[v.cursor.y][v.cursor.x] = 0
     }
 
     // Submitting command
     ENTER :: 257
     if pressed_key == ENTER
     {
-        terminal_reset_cell_color(v.cursor_x, v.cursor_y)
+        terminal_reset_cell_color(v.cursor.x, v.cursor.y)
 
-        command := get_command(v.line_text[1:])
+        command := get_command(terminal_data.chars[v.cursor.y][1:])
         switch command
         {
             case .Help:
@@ -248,6 +271,7 @@ terminal_update_entry :: proc(time : f64, pressed_key : i32, v : ^TerminalEntry)
                 terminal_print(v, "    COLOR: CHANGES TERMINAL COLOR")
                 terminal_print(v, "")
             case .Code:
+                terminal_data.state = TerminalCodeEditor{}
             case .MemEdit:
             case .Compile:
             case .Save:
@@ -264,3 +288,95 @@ terminal_update_entry :: proc(time : f64, pressed_key : i32, v : ^TerminalEntry)
     }
 }
 
+terminal_code_shift_buffer :: proc(x, y : int, to_right : bool)
+{
+    shift_value := int(to_right)
+    for i in x..<(CODELINE_SIZE - shift_value)
+    {
+        terminal_data.code[y][i + shift_value] = terminal_data.code[y][i + (1 - shift_value)]
+    }
+}
+
+terminal_code_insert :: proc(x, y : int, char : u8)
+{
+    terminal_code_shift_buffer(x, y, true)
+    terminal_data.code[y][x] = char
+}
+
+terminal_code_remove :: proc(x, y : int)
+{
+    terminal_code_shift_buffer(x, y, false)
+}
+
+terminal_update_code_editor :: proc(time : f64, pressed_key : i32, codeEditor : ^TerminalCodeEditor)
+{
+    empty_line : [64]u8
+    if !codeEditor.is_initted
+    {
+        codeEditor.is_initted = true
+
+        terminal_data.char_colors = terminal_data.color
+
+        if len(terminal_data.code) == 0
+        {
+            append(&terminal_data.code, empty_line)
+        }
+    }
+
+    // Cursor blink
+    terminal_cursor_blink(time, codeEditor)
+
+    // Letter typing
+    if new_char := get_key_letter(); new_char != 0 && codeEditor.cursor.x < 64
+    {
+        terminal_reset_cell_color(codeEditor.cursor.x, codeEditor.cursor.y)
+
+        terminal_code_insert(codeEditor.cursor.x, codeEditor.cursor.y, new_char)
+    }
+
+    // Deleting letter
+    BACKSPACE :: 259
+    if get_key_pressed() == BACKSPACE
+    {
+        terminal_reset_cell_color(codeEditor.cursor.x, codeEditor.cursor.y)
+
+        codeEditor.cursor.x -= 1
+
+        if codeEditor.cursor.x == -1
+        {
+            codeEditor.cursor.x = 0
+        }
+
+        terminal_code_remove(codeEditor.cursor.x, codeEditor.cursor.y)
+    }
+
+    // New line
+    ENTER :: 257
+    if get_key_pressed() == ENTER
+    {
+        inject_at(&terminal_data.code, codeEditor.cursor.y, empty_line)
+        codeEditor.cursor.y += 1
+    }
+
+    // Move Cursor
+    RIGHT :: 262
+    LEFT :: 263
+    DOWN :: 264
+    UP :: 265
+    if get_key_pressed() == RIGHT
+    {
+        if codeEditor.cursor.x < CODELINE_SIZE do codeEditor.cursor.x += 1
+    }
+    else if get_key_pressed() == LEFT
+    {
+        if codeEditor.cursor.x > 0 do codeEditor.cursor.x -= 1
+    }
+    else if get_key_pressed() == DOWN
+    {
+        if codeEditor.cursor.y < len(terminal_data.code) do codeEditor.cursor.y += 1
+    }
+    else if get_key_pressed() == UP
+    {
+        if codeEditor.cursor.y > 0 do codeEditor.cursor.y -= 1
+    }
+}
