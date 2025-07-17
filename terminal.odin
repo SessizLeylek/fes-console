@@ -96,15 +96,6 @@ terminal_invert_cell_color :: proc(x, y : int)
     terminal_data.should_refresh = true
 }
 
-terminal_cursor_blink :: proc(v : $T)
-{
-    if get_time() > v.last_cursor_blink + 0.5
-    {
-        v.last_cursor_blink = get_time()
-        terminal_invert_cell_color(v.cursor.x, v.cursor.y)
-    }
-}
-
 terminal_clear_line :: proc(line_number : int)
 {
     terminal_data.chars[line_number] = 0
@@ -220,7 +211,11 @@ terminal_update_entry :: proc(v : ^TerminalEntry)
     }
 
     // Cursor blink
-    terminal_cursor_blink(v)
+    if get_time() > v.last_cursor_blink + 0.5
+    {
+        v.last_cursor_blink = get_time()
+        terminal_invert_cell_color(v.cursor.x, v.cursor.y)
+    }
 
     // Letter typing
     if new_char := get_key_letter(); new_char != 0 && v.cursor.x < TERMINAL_WIDTH - 1
@@ -286,12 +281,15 @@ terminal_update_entry :: proc(v : ^TerminalEntry)
 terminal_code_shift_buffer :: proc(x, y : int, to_right : bool)
 {
     shift_value := int(to_right)
-    for i in x..<(CODELINE_SIZE - shift_value)
+    start_value := to_right ? (CODELINE_SIZE - 2) : x
+    end_value := to_right ? x : (CODELINE_SIZE - 2)
+    step := to_right ? -1 : 1
+    for i := start_value; i != end_value; i += step
     {
         terminal_data.code[y][i + shift_value] = terminal_data.code[y][i + (1 - shift_value)]
     }
 }
-
+ 
 terminal_code_insert :: proc(x, y : int, char : u8)
 {
     terminal_code_shift_buffer(x, y, true)
@@ -301,15 +299,71 @@ terminal_code_insert :: proc(x, y : int, char : u8)
 terminal_code_remove :: proc(x, y : int)
 {
     terminal_code_shift_buffer(x, y, false)
+    terminal_data.code[y][CODELINE_SIZE - 1] = 0
 }
 
-terminal_update_code_editor :: proc(codeEditor : ^TerminalCodeEditor)
+displacement_to_range :: proc(val, min_val, max_val : $T) -> T
 {
+    return max(min_val, min(val, max_val)) - val
+}
 
-    empty_line : [64]u8
-    if !codeEditor.is_initted
+terminal_code_shift_screen :: proc(ce : ^TerminalCodeEditor)
+{
+    cursor_dx := displacement_to_range(ce.cursor.x, ce.top_left_position.x, ce.top_left_position.x + TERMINAL_WIDTH - 1)
+    cursor_dy := displacement_to_range(ce.cursor.y, ce.top_left_position.y, ce.top_left_position.y + TERMINAL_HEIGHT - 2)
+
+    ce.top_left_position -= {cursor_dx, cursor_dy}
+}
+
+terminal_code_draw_all :: proc(cursor_position : [2]int, top_left_position : [2]int)
+{
+    // Coding area
+    for j in 0..<(TERMINAL_HEIGHT - 1)
     {
-        codeEditor.is_initted = true
+        for i in 0..<TERMINAL_WIDTH
+        {
+            char : u8 = 0
+            if j + top_left_position.y < len(terminal_data.code) && i + top_left_position.x < CODELINE_SIZE
+            {
+                char = terminal_data.code[j + top_left_position.y][i + top_left_position.x]
+            } 
+
+            terminal_data.chars[j][i] = char
+        }
+    }
+
+    // Bottom line
+    for i in 0..<TERMINAL_WIDTH
+    {
+        BLACK_ON_WHITE :: 0b11110000
+        terminal_data.char_colors[TERMINAL_HEIGHT - 1] = BLACK_ON_WHITE
+        terminal_data.chars[TERMINAL_HEIGHT - 1] = {0, 0, 0, 0, 'C', 'O', 'D', 'E', 0, 'E', 'D', 'I', 'T', 'O', 'R', 0, 0,
+                                                    0, 0, 1, 1, 1, ':', 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
+        // Cursor position
+        terminal_data.chars[TERMINAL_HEIGHT - 1][19] = u8(cursor_position.y / 100) + '0'
+        terminal_data.chars[TERMINAL_HEIGHT - 1][20] = u8(cursor_position.y / 10 % 10) + '0'
+        terminal_data.chars[TERMINAL_HEIGHT - 1][21] = u8(cursor_position.y % 10) + '0'
+
+        terminal_data.chars[TERMINAL_HEIGHT - 1][23] = u8(cursor_position.x / 10 % 10) + '0'
+        terminal_data.chars[TERMINAL_HEIGHT - 1][24] = u8(cursor_position.x % 10) + '0'
+    }
+
+    terminal_data.should_refresh = true
+}
+
+terminal_code_relative_cursor_position :: proc() -> (int, int)
+{
+    ce := terminal_data.state.(TerminalCodeEditor)
+    return ce.cursor.x - ce.top_left_position.x, ce.cursor.y - ce.top_left_position.y
+}
+
+terminal_update_code_editor :: proc(code_editor : ^TerminalCodeEditor)
+{
+    should_redraw : bool
+    empty_line : [64]u8
+    if !code_editor.is_initted
+    {
+        code_editor.is_initted = true
 
         terminal_data.char_colors = terminal_data.color
 
@@ -317,58 +371,96 @@ terminal_update_code_editor :: proc(codeEditor : ^TerminalCodeEditor)
         {
             append(&terminal_data.code, empty_line)
         }
+
+        should_redraw = true
     }
 
     // Cursor blink
-    terminal_cursor_blink(codeEditor)
+    if get_time() > code_editor.last_cursor_blink + 0.5
+    {
+        code_editor.last_cursor_blink = get_time()
+        terminal_invert_cell_color(terminal_code_relative_cursor_position())
+    }
 
     // Letter typing
-    if new_char := get_key_letter(); new_char != 0 && codeEditor.cursor.x < 64
+    if new_char := get_key_letter(); new_char != 0 && code_editor.cursor.x < 64
     {
-        terminal_reset_cell_color(codeEditor.cursor.x, codeEditor.cursor.y)
+        terminal_reset_cell_color(terminal_code_relative_cursor_position())
 
-        terminal_code_insert(codeEditor.cursor.x, codeEditor.cursor.y, new_char)
-        codeEditor.cursor.x += 1
+        terminal_code_insert(code_editor.cursor.x, code_editor.cursor.y, new_char)
+        should_redraw = true
+
+        terminal_code_shift_screen(code_editor)
     }
 
     // Deleting letter
     if get_key_pressed() == .BACKSPACE
     {
-        terminal_reset_cell_color(codeEditor.cursor.x, codeEditor.cursor.y)
+        terminal_reset_cell_color(terminal_code_relative_cursor_position())
 
-        codeEditor.cursor.x -= 1
+        code_editor.cursor.x -= 1
 
-        if codeEditor.cursor.x == -1
+        if code_editor.cursor.x == -1
         {
-            codeEditor.cursor.x = 0
+            code_editor.cursor.x = 0
         }
 
-        terminal_code_remove(codeEditor.cursor.x, codeEditor.cursor.y)
+        terminal_code_remove(code_editor.cursor.x, code_editor.cursor.y)
+        should_redraw = true
     }
 
     // New line
     if get_key_pressed() == .ENTER
     {
-        inject_at(&terminal_data.code, codeEditor.cursor.y, empty_line)
-        codeEditor.cursor.y += 1
+        inject_at(&terminal_data.code, code_editor.cursor.y + 1, empty_line)
+
+        terminal_reset_cell_color(terminal_code_relative_cursor_position())
+        code_editor.cursor.y += 1
+        code_editor.cursor.x = 0
+
+        terminal_code_shift_screen(code_editor)
+        should_redraw = true
     }
 
     // Move Cursor
     if get_key_pressed() == .RIGHT
     {
-        if codeEditor.cursor.x < CODELINE_SIZE do codeEditor.cursor.x += 1
+        terminal_reset_cell_color(terminal_code_relative_cursor_position())
+        if code_editor.cursor.x < CODELINE_SIZE do code_editor.cursor.x += 1
+
+        terminal_code_shift_screen(code_editor)
+        should_redraw = true
     }
     else if get_key_pressed() == .LEFT
     {
-        if codeEditor.cursor.x > 0 do codeEditor.cursor.x -= 1
+        terminal_reset_cell_color(terminal_code_relative_cursor_position())
+        if code_editor.cursor.x > 0 do code_editor.cursor.x -= 1
+
+        terminal_code_shift_screen(code_editor)
+        should_redraw = true
     }
     else if get_key_pressed() == .DOWN
     {
-        if codeEditor.cursor.y < len(terminal_data.code) do codeEditor.cursor.y += 1
+        terminal_reset_cell_color(terminal_code_relative_cursor_position())
+        if code_editor.cursor.y < len(terminal_data.code) do code_editor.cursor.y += 1
+
+        terminal_code_shift_screen(code_editor)
+        should_redraw = true
     }
     else if get_key_pressed() == .UP
     {
-        if codeEditor.cursor.y > 0 do codeEditor.cursor.y -= 1
+        terminal_reset_cell_color(terminal_code_relative_cursor_position())
+        if code_editor.cursor.y > 0 do code_editor.cursor.y -= 1
+
+        terminal_code_shift_screen(code_editor)
+        should_redraw = true
     }
 
+    if should_redraw do terminal_code_draw_all(code_editor.cursor, code_editor.top_left_position)
+
+    // Clamp cursor
+    if code_editor.cursor.x >= CODELINE_SIZE
+    {
+        code_editor.cursor.x = CODELINE_SIZE - 1
+    }
 }
