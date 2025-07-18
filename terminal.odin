@@ -6,6 +6,7 @@ import "core:strings"
 CODELINE_SIZE :: 64
 TERMINAL_WIDTH :: SCREEN_WIDTH / CHARSIZE
 TERMINAL_HEIGHT :: SCREEN_HEIGHT / CHARSIZE
+CURSOR_BLINK_INTERVAL :: 0.3
 
 TerminalEntry :: struct
 {
@@ -17,6 +18,7 @@ TerminalEntry :: struct
 TerminalCodeEditor :: struct
 {
     is_initted : bool,
+    desired_cursor_x : int,
     cursor : [2]int,
     top_left_position : [2]int,
     last_cursor_blink : f64,
@@ -211,7 +213,7 @@ terminal_update_entry :: proc(v : ^TerminalEntry)
     }
 
     // Cursor blink
-    if get_time() > v.last_cursor_blink + 0.5
+    if get_time() > v.last_cursor_blink + CURSOR_BLINK_INTERVAL
     {
         v.last_cursor_blink = get_time()
         terminal_invert_cell_color(v.cursor.x, v.cursor.y)
@@ -305,6 +307,21 @@ terminal_code_remove :: proc(x, y : int)
     terminal_data.code[y][CODELINE_SIZE - 1] = 0
 }
 
+terminal_code_line_end :: proc(line_number : int) -> int
+{
+    line_end := CODELINE_SIZE
+    for i in 0..<CODELINE_SIZE
+    {
+        if terminal_data.code[line_number][i] == 0
+        {
+            line_end = i
+            break
+        }
+    }
+
+    return line_end
+}
+
 displacement_to_range :: proc(val, min_val, max_val : $T) -> T
 {
     return max(min_val, min(val, max_val)) - val
@@ -379,7 +396,7 @@ terminal_update_code_editor :: proc(code_editor : ^TerminalCodeEditor)
     }
 
     // Cursor blink
-    if get_time() > code_editor.last_cursor_blink + 0.5
+    if get_time() > code_editor.last_cursor_blink + CURSOR_BLINK_INTERVAL
     {
         code_editor.last_cursor_blink = get_time()
         terminal_invert_cell_color(terminal_code_relative_cursor_position())
@@ -395,6 +412,8 @@ terminal_update_code_editor :: proc(code_editor : ^TerminalCodeEditor)
 
         code_editor.cursor.x += 1
         terminal_code_shift_screen(code_editor)
+
+        code_editor.desired_cursor_x = code_editor.cursor.x
     }
 
     // Deleting
@@ -402,18 +421,23 @@ terminal_update_code_editor :: proc(code_editor : ^TerminalCodeEditor)
     {
         terminal_reset_cell_color(terminal_code_relative_cursor_position())
 
-        // Delete letter
         if code_editor.cursor.x > 0
-        {
+        {   // Delete letter
             code_editor.cursor.x -= 1
             terminal_code_remove(code_editor.cursor.x, code_editor.cursor.y)
             should_redraw = true
-
+            
             terminal_code_shift_screen(code_editor)
+            
+            code_editor.desired_cursor_x = code_editor.cursor.x
         }
-        else    // Delete line
-        {
+        else if code_editor.cursor.y > 0 && terminal_data.code[code_editor.cursor.y] == empty_line
+        {   // Delete line
+            ordered_remove(&terminal_data.code, code_editor.cursor.y)
 
+            code_editor.cursor.y -= 1
+            terminal_code_shift_screen(code_editor)
+            should_redraw = true
         }
     }
 
@@ -428,6 +452,8 @@ terminal_update_code_editor :: proc(code_editor : ^TerminalCodeEditor)
 
         terminal_code_shift_screen(code_editor)
         should_redraw = true
+
+        code_editor.desired_cursor_x = 0
     }
 
     // Move Cursor
@@ -435,6 +461,8 @@ terminal_update_code_editor :: proc(code_editor : ^TerminalCodeEditor)
     {
         terminal_reset_cell_color(terminal_code_relative_cursor_position())
         if code_editor.cursor.x < CODELINE_SIZE do code_editor.cursor.x += 1
+
+        code_editor.desired_cursor_x = code_editor.cursor.x
 
         terminal_code_shift_screen(code_editor)
         should_redraw = true
@@ -444,13 +472,17 @@ terminal_update_code_editor :: proc(code_editor : ^TerminalCodeEditor)
         terminal_reset_cell_color(terminal_code_relative_cursor_position())
         if code_editor.cursor.x > 0 do code_editor.cursor.x -= 1
 
+        code_editor.desired_cursor_x = code_editor.cursor.x
+
         terminal_code_shift_screen(code_editor)
         should_redraw = true
     }
     else if get_key_pressed() == .DOWN
     {
         terminal_reset_cell_color(terminal_code_relative_cursor_position())
-        if code_editor.cursor.y < len(terminal_data.code) do code_editor.cursor.y += 1
+        if code_editor.cursor.y < len(terminal_data.code) - 1 do code_editor.cursor.y += 1
+
+        code_editor.cursor.x = min(code_editor.desired_cursor_x, terminal_code_line_end(code_editor.cursor.y))
 
         terminal_code_shift_screen(code_editor)
         should_redraw = true
@@ -459,6 +491,8 @@ terminal_update_code_editor :: proc(code_editor : ^TerminalCodeEditor)
     {
         terminal_reset_cell_color(terminal_code_relative_cursor_position())
         if code_editor.cursor.y > 0 do code_editor.cursor.y -= 1
+        
+        code_editor.cursor.x = min(code_editor.desired_cursor_x, terminal_code_line_end(code_editor.cursor.y))
 
         terminal_code_shift_screen(code_editor)
         should_redraw = true
