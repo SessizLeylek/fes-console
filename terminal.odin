@@ -282,8 +282,11 @@ terminal_code_shift_buffer :: proc(x, y : int, to_right : bool)
 {
     shift_value := int(to_right)
     start_value := to_right ? (CODELINE_SIZE - 2) : x
-    end_value := to_right ? x : (CODELINE_SIZE - 2)
+    end_value := to_right ? x : (CODELINE_SIZE - 1)
     step := to_right ? -1 : 1
+
+    if (end_value - start_value) * step <= 0 do return   // to prevent infinite loops
+
     for i := start_value; i != end_value; i += step
     {
         terminal_data.code[y][i + shift_value] = terminal_data.code[y][i + (1 - shift_value)]
@@ -383,30 +386,35 @@ terminal_update_code_editor :: proc(code_editor : ^TerminalCodeEditor)
     }
 
     // Letter typing
-    if new_char := get_key_letter(); new_char != 0 && code_editor.cursor.x < 64
+    if new_char := get_key_letter(); new_char != 0 && code_editor.cursor.x < CODELINE_SIZE
     {
         terminal_reset_cell_color(terminal_code_relative_cursor_position())
 
         terminal_code_insert(code_editor.cursor.x, code_editor.cursor.y, new_char)
         should_redraw = true
 
+        code_editor.cursor.x += 1
         terminal_code_shift_screen(code_editor)
     }
 
-    // Deleting letter
+    // Deleting
     if get_key_pressed() == .BACKSPACE
     {
         terminal_reset_cell_color(terminal_code_relative_cursor_position())
 
-        code_editor.cursor.x -= 1
-
-        if code_editor.cursor.x == -1
+        // Delete letter
+        if code_editor.cursor.x > 0
         {
-            code_editor.cursor.x = 0
-        }
+            code_editor.cursor.x -= 1
+            terminal_code_remove(code_editor.cursor.x, code_editor.cursor.y)
+            should_redraw = true
 
-        terminal_code_remove(code_editor.cursor.x, code_editor.cursor.y)
-        should_redraw = true
+            terminal_code_shift_screen(code_editor)
+        }
+        else    // Delete line
+        {
+
+        }
     }
 
     // New line
@@ -457,10 +465,4 @@ terminal_update_code_editor :: proc(code_editor : ^TerminalCodeEditor)
     }
 
     if should_redraw do terminal_code_draw_all(code_editor.cursor, code_editor.top_left_position)
-
-    // Clamp cursor
-    if code_editor.cursor.x >= CODELINE_SIZE
-    {
-        code_editor.cursor.x = CODELINE_SIZE - 1
-    }
 }
