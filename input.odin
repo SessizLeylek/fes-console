@@ -36,3 +36,6 @@ get_key_letter :: proc() -> u8
 
     return 0
 }
+
+save_file :: rl.SaveFileData
+load_file :: rl.LoadFileData

@@ -148,33 +148,58 @@ terminal_update :: proc()
 
 }
 
-terminal_buffer_from_code :: proc() -> (buffer: []u8, size: int)
+terminal_buffer_from_code :: proc() -> []u8
 {
     line_count := len(terminal_data.code)
     buff_size := line_count * CODELINE_SIZE
     buff := make([]u8, buff_size)
 
+    buffer_ptr := 0
+
     for i in 0..<line_count
     {
         for j in 0..<CODELINE_SIZE
         {
-            buff[j + i * CODELINE_SIZE] = terminal_data.code[i][j]
+            if terminal_data.code[i][j] == 0
+            {
+                buff[buffer_ptr] = '\n'
+                buffer_ptr += 1
+                break
+            }
+
+            buff[buffer_ptr] = terminal_data.code[i][j]
+            buffer_ptr += 1
         }
     }
 
-    return buff[:], buff_size
+    // we don't include the last character because it is an extra LF
+    if buffer_ptr == 0 do return nil
+
+    return buff[:(buffer_ptr - 1)]
 }
 
 terminal_buffer_to_code :: proc(buffer : []u8)
 {
-    line_count := (len(buffer) / 64)
-    resize(&terminal_data.code, line_count)
+    resize(&terminal_data.code, 1)
+    empty_line : [CODELINE_SIZE]u8
 
-    for i in 0..<line_count
+    buffer_ptr := 0
+    i, j : int
+
+    for buffer_ptr < len(buffer)
     {
-        for j in 0..<CODELINE_SIZE
+        if buffer[buffer_ptr] == '\n' || j >= CODELINE_SIZE
         {
-            terminal_data.code[i][j] = buffer[j + i * CODELINE_SIZE]
+            append(&terminal_data.code, empty_line)
+            i += 1
+            j = -1
         }
+        else
+        {
+            terminal_data.code[i][j] = buffer[buffer_ptr]
+        }
+
+        buffer_ptr += 1
+        j += 1
     }
 }

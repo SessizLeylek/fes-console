@@ -1,5 +1,6 @@
 package console
 
+import "core:slice"
 import "core:strings"
 
 terminal_print :: proc(v : ^TerminalEntry, text : string)
@@ -124,7 +125,33 @@ terminal_update_entry :: proc(v : ^TerminalEntry)
             case .MemEdit:
             case .Compile:
             case .Save:
+                buffer := terminal_buffer_from_code()
+                if buffer == nil 
+                {
+                    terminal_print(v, "No written code to save")
+                    terminal_print(v, "")
+                    break
+                }
+
+                save_file("code.txt", &buffer[0], i32(len(buffer)))
+
+                terminal_print(v, "Code saved to disk succesfully")
+                terminal_print(v, "")
             case .Load:
+                file_size : i32
+                buffer := load_file("code.txt", &file_size)
+                if buffer == nil
+                {
+                    terminal_print(v, "Code file not found")
+                    terminal_print(v, "")
+                    break
+                }
+
+                buffer_array := slice.from_ptr(buffer, int(file_size))
+                terminal_buffer_to_code(buffer_array)
+
+                terminal_print(v, "Code loaded from disk succesfully")
+                terminal_print(v, "")
             case .Start:
             case .Color:
                 terminal_data.color += 1
