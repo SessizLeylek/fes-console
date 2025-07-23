@@ -61,6 +61,7 @@ window_init :: proc()
     screen_texture = rl.LoadTextureFromImage(temp_img)
 
     rl.SetTargetFPS(25)
+    rl.SetExitKey(.KEY_NULL)
 }
 
 window_update :: proc() -> bool

@@ -36,13 +36,13 @@ get_command :: proc(char_array : []u8) -> TerminalCommand
     defer delete(word)
 
     if strings.equal_fold(word_trimmed, "HELP") do return .Help
+    if strings.equal_fold(word_trimmed, "COLOR") do return .Color
     if strings.equal_fold(word_trimmed, "CODE") do return .Code
     if strings.equal_fold(word_trimmed, "MEMEDIT") do return .MemEdit
     if strings.equal_fold(word_trimmed, "COMPILE") do return .Compile
     if strings.equal_fold(word_trimmed, "SAVE") do return .Save
     if strings.equal_fold(word_trimmed, "LOAD") do return .Load
     if strings.equal_fold(word_trimmed, "START") do return .Start
-    if strings.equal_fold(word_trimmed, "COLOR") do return .Color
 
     return .None
 }
@@ -111,13 +111,13 @@ terminal_update_entry :: proc(v : ^TerminalEntry)
             case .Help:
                 terminal_print(v, "FES TERMINAL HELP UTILITY")
                 terminal_print(v, "    HELP: SHOWS THIS DIALOG")
+                terminal_print(v, "    COLOR: CHANGES TERMINAL COLOR")
                 terminal_print(v, "    CODE: OPENS THE CODE EDITOR")
                 terminal_print(v, "    MEMEDIT: OPENS THE MEMORY EDITOR")
                 terminal_print(v, "    COMPILE: COMPILES CODE TO MEMORY")
                 terminal_print(v, "    SAVE: SAVES THE GAME TO CARTRIDGE")
                 terminal_print(v, "    LOAD: LOADS A GAME FROM THE CARTRIDGE")
                 terminal_print(v, "    START: STARTS THE GAME")
-                terminal_print(v, "    COLOR: CHANGES TERMINAL COLOR")
                 terminal_print(v, "")
             case .Code:
                 terminal_data.state = TerminalCodeEditor{}

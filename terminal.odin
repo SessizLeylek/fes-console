@@ -3,7 +3,7 @@ package console
 CODELINE_SIZE :: 64
 TERMINAL_WIDTH :: SCREEN_WIDTH / CHARSIZE
 TERMINAL_HEIGHT :: SCREEN_HEIGHT / CHARSIZE
-CURSOR_BLINK_INTERVAL :: 0.3
+CURSOR_BLINK_INTERVAL :: 0.25
 
 TerminalEntry :: struct
 {
@@ -146,4 +146,35 @@ terminal_update :: proc()
     	update_buffer24_from_buffer4(console_get_video_buffer())    	
     }
 
+}
+
+terminal_buffer_from_code :: proc() -> (buffer: []u8, size: int)
+{
+    line_count := len(terminal_data.code)
+    buff_size := line_count * CODELINE_SIZE
+    buff := make([]u8, buff_size)
+
+    for i in 0..<line_count
+    {
+        for j in 0..<CODELINE_SIZE
+        {
+            buff[j + i * CODELINE_SIZE] = terminal_data.code[i][j]
+        }
+    }
+
+    return buff[:], buff_size
+}
+
+terminal_buffer_to_code :: proc(buffer : []u8)
+{
+    line_count := (len(buffer) / 64)
+    resize(&terminal_data.code, line_count)
+
+    for i in 0..<line_count
+    {
+        for j in 0..<CODELINE_SIZE
+        {
+            terminal_data.code[i][j] = buffer[j + i * CODELINE_SIZE]
+        }
+    }
 }

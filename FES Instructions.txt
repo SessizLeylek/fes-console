@@ -49,16 +49,16 @@ r    : register
 -123 : negative decimal numbers
 b101 : binary numbers
 xABC : hexadecimal numbers
-.123 : dereferencing
-;ABC : defining constant
-,ABC : using the constant
+*123 : dereferencing
+:ABC : defining constant
+.ABC : using the constant
 =ABC : defining macro (can't have a name of an existing instruction)
-[abc]: macro scope
+(abc): macro scope
 m0   : macro parameter
 /ABC : commenting
-ln   : current line number
-a16  : give x bytes of memory address
-'ABC': text definiton, returns the address
+%   : current line number
+&16  : give x bytes of memory address
+"ABC": text definiton, returns the address
 
 
 #Using instructions and macros:
@@ -83,7 +83,7 @@ a16  : give x bytes of memory address
 	/ at this moment the value on the register is still 100
 	/ while the value on the address xFFFFFFFFFFFFFFF0 101
 	
-	;my_function ln
+	;my_function %
 	inc xFFFFFFFFFFFFFFF0
 	jmp ,my_function
 	/ with this, we can save the address of the "inc" instruction to a constant

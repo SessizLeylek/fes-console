@@ -4,7 +4,7 @@ terminal_code_shift_buffer :: proc(x, y : int, to_right : bool)
 {
     shift_value := int(to_right)
     start_value := to_right ? (CODELINE_SIZE - 2) : x
-    end_value := to_right ? x : (CODELINE_SIZE - 1)
+    end_value := to_right ? x - 1 : (CODELINE_SIZE - 1)
     step := to_right ? -1 : 1
 
     if (end_value - start_value) * step <= 0 do return   // to prevent infinite loops
@@ -234,5 +234,11 @@ terminal_update_code_editor :: proc(code_editor : ^TerminalCodeEditor)
     if should_redraw 
     {
         terminal_code_draw_all(code_editor.cursor, code_editor.top_left_position)
+    }
+
+    // Exit code editor
+    if get_key_pressed() == .ESCAPE
+    {
+        terminal_data.state = TerminalEntry {cursor = {0, TERMINAL_HEIGHT - 1}}
     }
 }
