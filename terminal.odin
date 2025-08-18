@@ -148,13 +148,18 @@ terminal_update :: proc()
 
 }
 
-terminal_buffer_from_code :: proc() -> []u8
+terminal_export :: proc() -> []u8
 {
     line_count := len(terminal_data.code)
-    buff_size := line_count * CODELINE_SIZE
+    buff_size := line_count * CODELINE_SIZE + CONSOLE_MEMORY + 1
     buff := make([]u8, buff_size)
 
-    buffer_ptr := 0
+    // Export memory
+    copy_slice(buff[:CONSOLE_MEMORY], console_memory[:])
+    buff[CONSOLE_MEMORY] = '\n'
+
+    // Export code
+    buffer_ptr := CONSOLE_MEMORY + 1
 
     for i in 0..<line_count
     {
@@ -178,12 +183,16 @@ terminal_buffer_from_code :: proc() -> []u8
     return buff[:(buffer_ptr - 1)]
 }
 
-terminal_buffer_to_code :: proc(buffer : []u8)
+terminal_import :: proc(buffer : []u8)
 {
+    // Import Memory
+    copy_slice(console_memory[:], buffer[0:CONSOLE_MEMORY])
+
+    // Import Code
     resize(&terminal_data.code, 1)
     empty_line : [CODELINE_SIZE]u8
 
-    buffer_ptr := 0
+    buffer_ptr := CONSOLE_MEMORY + 1    // We offset the code from memory's end by one byte'\n' to keep output human readable
     i, j : int
 
     for buffer_ptr < len(buffer)

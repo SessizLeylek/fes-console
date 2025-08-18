@@ -125,7 +125,7 @@ terminal_update_entry :: proc(v : ^TerminalEntry)
             case .MemEdit:
             case .Compile:
             case .Save:
-                buffer := terminal_buffer_from_code()
+                buffer := terminal_export()
                 if buffer == nil 
                 {
                     terminal_print(v, "No written code to save")
@@ -148,7 +148,7 @@ terminal_update_entry :: proc(v : ^TerminalEntry)
                 }
 
                 buffer_array := slice.from_ptr(buffer, int(file_size))
-                terminal_buffer_to_code(buffer_array)
+                terminal_import(buffer_array)
 
                 terminal_print(v, "Code loaded from disk succesfully")
                 terminal_print(v, "")
