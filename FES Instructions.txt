@@ -4,87 +4,59 @@ xxx: unsigned number operation
 xxxs: signed number operation
 xxxb: byte operation
 
-add, adds, addb:    addition, saves the result to register
-sub, subs, subb:    substraction, saves the result to register
-mul, muls, mulb:    multiplication, saves the result to register
-div, divs, divb:    divison, saves the result to register
-mod, mods, modb:    modulo, saves the result to register
-shl, shlb:          shift left, saves the result to register
-shr, shrb:          shift right, saves the result to register
-and, andb:          and, saves the result to register
-or,  orb:           or, saves the result to register
-xor, xorb:          exclusive or, saves the result to register
-not, notb:          not, saves the result to register
+FES INSTRUCTIONS    DESCRIPTION                                         C EQUIVALENT
+----------------    ------------------------------------------------    -----------------------------
+add, adds, addb:    addition, saves the result to register				"R = arg0 + arg1"
+sub, subs, subb:    substraction, saves the result to register			"R = arg0 - arg1"
+mul, muls, mulb:    multiplication, saves the result to register		"R = arg0 * arg1"
+div, divs, divb:    divison, saves the result to register				"R = arg0 / arg1"
+mod, mods, modb:    modulo, saves the result to register				"R = arg0 % arg1"
+shl, shlb:          shift left, saves the result to register			"R = arg0 >> arg1"
+shr, shrb:          shift right, saves the result to register			"R = arg0 << arg1"
+and, andb:          and, saves the result to register					"R = arg0 & arg1"
+or,  orb:           or, saves the result to register					"R = arg0 | arg1"
+xor, xorb:          exclusive or, saves the result to register			"R = arg0 ^ arg1"
 
-get, getb:          get the value from memory to register
-put, putb:          put the value to memory from register
-set, setb:          set the value on register
+get, getb:          get the value from memory to register				"R = arg0*"
+put, putb:          put the value to memory from register				"arg0* = R"
+set, setb:          set the value on register							"R = arg0"
 
-cpy:                copy from one address to another with size
-fll:                fill memory with given byte
+cpy:                copy from one address to another with size			"memcpy(arg0, arg1, arg2)"  (to, from, size)
+fll:                fill memory with given byte							"memset(arg0, arg1, arg2)"  (to, byte, size)
 
-num, snum:          cast byte to number
-byt:                cast value to byte
-inv:                invert number
+clt, clts, cltb:    compare less than, set register to zero if true		"R = !(arg0 < arg1)"
+cgt, cgts, cgtb:    compare greater than, set register to zero if true	"R = !(arg0 > arg1)"
+    * no equality check because same functionality as sub, subs, subb
 
-clt, clts, cltb:    compare less than, set register to zero if true
-cgt, cgts, cgtb:    compare greater than, set register to zero if true
+jmp:                jump to address										"__asm__("JMP" : arg0)"
+jif:                jump to address if register is zero                 "if (R == 0) __asm__("JMP" : arg0)"
 
-jmp:                jump to address
-jif:                jump to address if register is zero
+halt:               stop all instructions                               "exit(0)"
 
-halt:               stop all instructions
+num, snum:          cast byte to number									// not sure
+byt:                cast value to bytes									// not sure
 
-prt:                print text on screen
-prn, prns, prnb:    print number on screen
-bck:                moves cursor back x amount of characters
-scr:                scroll the screen one line up
+prt:                print text on screen                                // not sure
+prn, prns, prnb:    print number on screen                              // not sure
+bck:                moves cursor back x amount of characters            // not sure
+scr:                scroll the screen one line up                       // not sure
 
 
 
 #Additional symbols:
 
 r    : register
-123  : decimal numbers
++123 : decimal numbers (plus sign is optional)
 -123 : negative decimal numbers
 b101 : binary numbers
 xABC : hexadecimal numbers
 *123 : dereferencing
 :ABC : defining constant
 .ABC : using the constant
-=ABC : defining macro (can't have a name of an existing instruction)
+=ABC : defining macro (can't have the name of an existing instruction)
 (abc): macro scope
 m0   : macro parameter
 /ABC : commenting
-%   : current line number
-&16  : give x bytes of memory address
+%    : current line number (to define jump constants, i.e. :MAIN %, JMP .MAIN)
+&4   : give 4 bytes of memory address (to simplify address getting, does not panic when runs out of memory)
 "ABC": text definiton, returns the address
-
-
-#Using instructions and macros:
-
-	;temp a2
-	;hello_world 'Hello World!'
-
-	=inc 1 / increases the number on place
-	[
-		put ,temp
-		add .m0 1
-		put m0
-		get ,temp
-	]
-
-	wrt ,hello_world
-	wrt 'A great example!'
-	
-	set 100
-	put xFFFFFFFFFFFFFFF0
-	inc xFFFFFFFFFFFFFFF0
-	/ at this moment the value on the register is still 100
-	/ while the value on the address xFFFFFFFFFFFFFFF0 101
-	
-	;my_function %
-	inc xFFFFFFFFFFFFFFF0
-	jmp ,my_function
-	/ with this, we can save the address of the "inc" instruction to a constant
-	/ then use it with jmp instruction, increasing the value infinitely
