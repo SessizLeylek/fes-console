@@ -152,7 +152,8 @@ terminal_update_code_editor :: proc(code_editor : ^TerminalCodeEditor)
             code_editor.desired_cursor_x = code_editor.cursor.x
         }
         else if code_editor.cursor.y > 0 && terminal_data.code[code_editor.cursor.y] == empty_line
-        {   // Delete line
+        {   
+            // Delete line
             ordered_remove(&terminal_data.code, code_editor.cursor.y)
 
             code_editor.cursor.y -= 1
@@ -185,6 +186,11 @@ terminal_update_code_editor :: proc(code_editor : ^TerminalCodeEditor)
         {
             code_editor.cursor.x += 1
         }
+        else if code_editor.cursor.y < len(terminal_data.code) - 1 
+        {
+            code_editor.cursor.x = 0
+            code_editor.cursor.y += 1
+        }
 
         code_editor.desired_cursor_x = code_editor.cursor.x
 
@@ -197,6 +203,11 @@ terminal_update_code_editor :: proc(code_editor : ^TerminalCodeEditor)
         if code_editor.cursor.x > 0 
         {
             code_editor.cursor.x -= 1
+        }
+        else if code_editor.cursor.y > 0
+        {
+            code_editor.cursor.x = 0
+            code_editor.cursor.y -= 1
         }
 
         code_editor.desired_cursor_x = code_editor.cursor.x
