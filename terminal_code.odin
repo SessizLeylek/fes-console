@@ -1,30 +1,54 @@
 package console
 
-terminal_code_shift_buffer :: proc(x, y : int, to_right : bool)
+terminal_code_copy_buffer :: proc(from, to : [2]int, length : int)
 {
-    shift_value := int(to_right)
-    start_value := to_right ? (CODELINE_SIZE - 2) : x
-    end_value := to_right ? x - 1 : (CODELINE_SIZE - 1)
-    step := to_right ? -1 : 1
+    temp_buffer := terminal_data.code[to.y]
 
-    if (end_value - start_value) * step <= 0 do return   // to prevent infinite loops
-
-    for i := start_value; i != end_value; i += step
+    for i := 0; i < length; i += 1
     {
-        terminal_data.code[y][i + shift_value] = terminal_data.code[y][i + (1 - shift_value)]
+        temp_buffer[to.x] = terminal_data.code[from.y][from.x]
     }
+
+    terminal_data.code[to.y] = temp_buffer
+}
+
+terminal_code_shift_buffer :: proc(x, y, step : int)
+{
+    temp_buffer := terminal_data.code[y]
+
+    // clear old slice
+    for i := x; i < CODELINE_SIZE; i += 1
+    {
+        temp_buffer[i] = 0
+    }
+
+    // rewrite buffer
+    for i := x; i < CODELINE_SIZE; i += 1
+    {
+        if i + step < 0 || i + step >= CODELINE_SIZE do continue
+
+        temp_buffer[i + step] = terminal_data.code[y][i]
+    }
+
+    terminal_data.code[y] = temp_buffer
 }
  
 terminal_code_insert :: proc(x, y : int, char : u8)
 {
-    terminal_code_shift_buffer(x, y, true)
+    terminal_code_shift_buffer(x, y, 1)
     terminal_data.code[y][x] = char
 }
 
 terminal_code_remove :: proc(x, y : int)
 {
-    terminal_code_shift_buffer(x, y, false)
-    terminal_data.code[y][CODELINE_SIZE - 1] = 0
+    if x == CODELINE_SIZE
+    {
+        terminal_data.code[y][x - 1] = 0
+    }
+    else
+    {
+        terminal_code_shift_buffer(x, y, -1)
+    }
 }
 
 terminal_code_line_end :: proc(line_number : int) -> int
@@ -143,23 +167,33 @@ terminal_update_code_editor :: proc(code_editor : ^TerminalCodeEditor)
 
         if code_editor.cursor.x > 0
         {   // Delete letter
-            code_editor.cursor.x -= 1
             terminal_code_remove(code_editor.cursor.x, code_editor.cursor.y)
+            code_editor.cursor.x -= 1
             should_redraw = true
             
             terminal_code_shift_screen(code_editor)
             
             code_editor.desired_cursor_x = code_editor.cursor.x
         }
-        else if code_editor.cursor.y > 0 && terminal_data.code[code_editor.cursor.y] == empty_line
-        {   
-            // Delete line
-            ordered_remove(&terminal_data.code, code_editor.cursor.y)
+        else if code_editor.cursor.y > 0
+        {   // Delete line
+            if terminal_data.code[code_editor.cursor.y] != empty_line
+            {
+                upper_line_no := code_editor.cursor.y - 1
+                upper_line_end := terminal_code_line_end(upper_line_no)
+                terminal_code_shift_buffer(0, code_editor.cursor.y, upper_line_end)
+                terminal_code_copy_buffer({upper_line_end, code_editor.cursor.y}, {upper_line_end, upper_line_no}, terminal_code_line_end(code_editor.cursor.y))
+            }
+            else
+            {
+                ordered_remove(&terminal_data.code, code_editor.cursor.y)
 
-            code_editor.cursor.y -= 1
-            code_editor.cursor.x = terminal_code_line_end(code_editor.cursor.y)
-            terminal_code_shift_screen(code_editor)
-            should_redraw = true
+                code_editor.cursor.y -= 1
+                code_editor.cursor.x = terminal_code_line_end(code_editor.cursor.y)
+                terminal_code_shift_screen(code_editor)
+                should_redraw = true    
+            }
+            
         }
     }
 
@@ -206,7 +240,7 @@ terminal_update_code_editor :: proc(code_editor : ^TerminalCodeEditor)
         }
         else if code_editor.cursor.y > 0
         {
-            code_editor.cursor.x = 0
+            code_editor.cursor.x = terminal_code_line_end(code_editor.cursor.y)
             code_editor.cursor.y -= 1
         }
 
