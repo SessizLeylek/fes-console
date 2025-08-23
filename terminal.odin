@@ -23,7 +23,10 @@ TerminalCodeEditor :: struct
 
 TerminalMemoryEditor :: struct
 {
-
+    is_initted : bool,
+    row_length : u8,
+    top_left_index : int,
+    cursor : [2]int,
 }
 
 TerminalData :: struct
@@ -81,6 +84,8 @@ terminal_draw_all :: proc()
 
 terminal_reset_cell_color :: proc(x, y : int)
 {
+    if (x < 0 || y < 0 || x >= TERMINAL_WIDTH || y >= TERMINAL_HEIGHT) do return
+    
     terminal_data.char_colors[y][x] = terminal_data.color
 
     terminal_data.should_refresh = true
@@ -88,6 +93,8 @@ terminal_reset_cell_color :: proc(x, y : int)
 
 terminal_invert_cell_color :: proc(x, y : int)
 {
+    if (x < 0 || y < 0 || x >= TERMINAL_WIDTH || y >= TERMINAL_HEIGHT) do return
+
     old_color := terminal_data.char_colors[y][x]
     new_color := (old_color >> 4) + (old_color << 4)
     terminal_data.char_colors[y][x] = new_color
@@ -136,6 +143,7 @@ terminal_update :: proc()
         case TerminalCodeEditor:
             terminal_update_code_editor(&v)
         case TerminalMemoryEditor:
+            terminal_update_memedit(&v)
     }
 
     if terminal_data.should_refresh
