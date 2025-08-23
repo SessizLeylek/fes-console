@@ -5,33 +5,25 @@ import rl "vendor:raylib"
 get_time :: rl.GetTime
 
 KeyboardState :: struct{
-    last_pressed_key : rl.KeyboardKey,
-    last_pressed_char : rune,
-    last_check_time : f64,
+    is_ctrl_pressed : bool,
+    key : rl.KeyboardKey,
+    char : rune,
 }
 
-_keyboard_state : KeyboardState
+keyboard_state : KeyboardState
 
-get_keyboard_state :: proc()
+update_keyboard_state :: proc()
 {
-    if abs(get_time() - _keyboard_state.last_check_time) < 0.01 do return
+    using keyboard_state 
 
-    _keyboard_state.last_check_time = get_time()
-    _keyboard_state.last_pressed_char = rl.GetCharPressed()
-    _keyboard_state.last_pressed_key = rl.GetKeyPressed()
-}
-
-get_key_pressed :: proc() -> rl.KeyboardKey
-{
-    get_keyboard_state()
-    return _keyboard_state.last_pressed_key
+    char = rl.GetCharPressed()
+    key = rl.GetKeyPressed()
+    is_ctrl_pressed = rl.IsKeyDown(.LEFT_CONTROL) || rl.IsKeyDown(.RIGHT_CONTROL)
 }
 
 get_key_letter :: proc() -> u8
 {
-    get_keyboard_state()
-
-    char := _keyboard_state.last_pressed_char
+    char := keyboard_state.char
     if char >= ' ' && char <= '~' do return u8(char)
 
     return 0
