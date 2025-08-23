@@ -25,7 +25,7 @@ terminal_print :: proc(v : ^TerminalEntry, text : string)
 }
 
 TerminalCommand :: enum {
-    None, Help, Code, MemEdit, Compile, Save, Load, Start, Color,
+    None, Help, Code, Docs, MemEdit, Compile, Save, Load, Start, Color,
 }
 
 get_command :: proc(char_array : []u8) -> TerminalCommand
@@ -39,6 +39,7 @@ get_command :: proc(char_array : []u8) -> TerminalCommand
     if strings.equal_fold(word_trimmed, "HELP") do return .Help
     if strings.equal_fold(word_trimmed, "COLOR") do return .Color
     if strings.equal_fold(word_trimmed, "CODE") do return .Code
+    if strings.equal_fold(word_trimmed, "DOCS") do return .Docs
     if strings.equal_fold(word_trimmed, "MEMEDIT") do return .MemEdit
     if strings.equal_fold(word_trimmed, "COMPILE") do return .Compile
     if strings.equal_fold(word_trimmed, "SAVE") do return .Save
@@ -87,7 +88,7 @@ terminal_update_entry :: proc(v : ^TerminalEntry)
     }
 
     // Deleting letter
-    if get_key_pressed() == .BACKSPACE
+    if keyboard_state.key == .BACKSPACE
     {
         terminal_reset_cell_color(v.cursor.x, v.cursor.y)
 
@@ -102,7 +103,7 @@ terminal_update_entry :: proc(v : ^TerminalEntry)
     }
 
     // Submitting command
-    if get_key_pressed() == .ENTER
+    if keyboard_state.key == .ENTER
     {
         terminal_reset_cell_color(v.cursor.x, v.cursor.y)
 
@@ -114,15 +115,24 @@ terminal_update_entry :: proc(v : ^TerminalEntry)
                 terminal_print(v, "    HELP: SHOWS THIS DIALOG")
                 terminal_print(v, "    COLOR: CHANGES TERMINAL COLOR")
                 terminal_print(v, "    CODE: OPENS THE CODE EDITOR")
+                terminal_print(v, "    DOCS: LISTS NAME OF POSSIBLE FES INSTRUCTIONS")
                 terminal_print(v, "    MEMEDIT: OPENS THE MEMORY EDITOR")
                 terminal_print(v, "    COMPILE: COMPILES CODE TO MEMORY")
                 terminal_print(v, "    SAVE: SAVES THE GAME TO CARTRIDGE")
                 terminal_print(v, "    LOAD: LOADS A GAME FROM THE CARTRIDGE")
                 terminal_print(v, "    START: STARTS THE GAME")
                 terminal_print(v, "")
+            case .Docs:
+                terminal_print(v, "ADD ADDS ADDB SUB SUBS SUBB MUL MULS MULB")
+                terminal_print(v, "DIV DIVS DIVB MOD MODS MODB")
+                terminal_print(v, "SHL SHLB SHR SHRB AND ANDB OR ORB XOR XORB")
+                terminal_print(v, "GET GETB PUT PUTB SET SETB CPY FLL")
+                terminal_print(v, "CLT CLTS CLTB CGT CGTS CGTB JMP JIF HALT")
+                terminal_print(v, "")
             case .Code:
                 terminal_data.state = TerminalCodeEditor{}
             case .MemEdit:
+                terminal_data.state = TerminalMemoryEditor{ row_length = 32 }
             case .Compile:
             case .Save:
                 buffer := terminal_export()
