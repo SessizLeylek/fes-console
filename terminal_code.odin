@@ -1,26 +1,27 @@
 package console
 
+import "core:slice"
+
 terminal_code_copy_buffer :: proc(from, to : [2]int, length : int)
 {
     temp_buffer := terminal_data.code[to.y]
 
-    for i := 0; i < length; i += 1
+    clamped_length := min(length + from.x, CODELINE_SIZE) - from.x
+    clamped_length = min(length + to.x, CODELINE_SIZE) - to.x
+    for i := 0; i < clamped_length; i += 1
     {
-        temp_buffer[to.x] = terminal_data.code[from.y][from.x]
+        temp_buffer[to.x + i] = terminal_data.code[from.y][from.x + i]
     }
 
     terminal_data.code[to.y] = temp_buffer
 }
 
-terminal_code_shift_buffer :: proc(x, y, step : int)
+terminal_code_shift_buffer :: proc(x, y, step : int, hole_filler : u8 = 0)
 {
     temp_buffer := terminal_data.code[y]
 
     // clear old slice
-    for i := x; i < CODELINE_SIZE; i += 1
-    {
-        temp_buffer[i] = 0
-    }
+    slice.fill(temp_buffer[x:], hole_filler)
 
     // rewrite buffer
     for i := x; i < CODELINE_SIZE; i += 1
@@ -51,6 +52,7 @@ terminal_code_remove :: proc(x, y : int)
     }
 }
 
+// the next null char in a line
 terminal_code_line_end :: proc(line_number : int) -> int
 {
     line_end := CODELINE_SIZE
@@ -101,8 +103,8 @@ terminal_code_draw_all :: proc(cursor_position : [2]int, top_left_position : [2]
     {
         BLACK_ON_WHITE :: 0b11110000
         terminal_data.char_colors[TERMINAL_HEIGHT - 1] = BLACK_ON_WHITE
-        terminal_data.chars[TERMINAL_HEIGHT - 1] = {0, 0, 0, 0, 'C', 'O', 'D', 'E', 0, 'E', 'D', 'I', 'T', 'O', 'R', 0, 0,
-                                                    0, 0, 1, 1, 1, ':', 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
+        terminal_data.chars[TERMINAL_HEIGHT - 1] = {0, 0, 0, 0, 'C', 'O', 'D', 'E', 0, 'E', 'D', 'I', 'T', 'O', 'R', 0, 0, 0,
+                                                    0, 1, 1, 1, ':', 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
         // Cursor position
         terminal_data.chars[TERMINAL_HEIGHT - 1][19] = u8(cursor_position.y / 100) + '0'
         terminal_data.chars[TERMINAL_HEIGHT - 1][20] = u8(cursor_position.y / 10 % 10) + '0'
@@ -152,16 +154,14 @@ terminal_update_code_editor :: proc(code_editor : ^TerminalCodeEditor)
         terminal_reset_cell_color(terminal_code_relative_cursor_position())
 
         terminal_code_insert(code_editor.cursor.x, code_editor.cursor.y, new_char)
-        should_redraw = true
-
+        
         code_editor.cursor.x += 1
-        terminal_code_shift_screen(code_editor)
-
         code_editor.desired_cursor_x = code_editor.cursor.x
+        should_redraw = true
     }
 
     // Deleting
-    if get_key_pressed() == .BACKSPACE
+    if keyboard_state.key == .BACKSPACE
     {
         terminal_reset_cell_color(terminal_code_relative_cursor_position())
 
@@ -171,54 +171,82 @@ terminal_update_code_editor :: proc(code_editor : ^TerminalCodeEditor)
             code_editor.cursor.x -= 1
             should_redraw = true
             
-            terminal_code_shift_screen(code_editor)
-            
             code_editor.desired_cursor_x = code_editor.cursor.x
         }
         else if code_editor.cursor.y > 0
         {   // Delete line
+            cursor_position_after_deletion := [2]int {terminal_code_line_end(code_editor.cursor.y - 1), code_editor.cursor.y - 1}
+
             if terminal_data.code[code_editor.cursor.y] != empty_line
             {
+                // copy current line to upper
                 upper_line_no := code_editor.cursor.y - 1
                 upper_line_end := terminal_code_line_end(upper_line_no)
-                terminal_code_shift_buffer(0, code_editor.cursor.y, upper_line_end)
-                terminal_code_copy_buffer({upper_line_end, code_editor.cursor.y}, {upper_line_end, upper_line_no}, terminal_code_line_end(code_editor.cursor.y))
+                terminal_code_shift_buffer(0, code_editor.cursor.y, upper_line_end, hole_filler = ' ')
+                terminal_code_copy_buffer({upper_line_end, code_editor.cursor.y}, {upper_line_end, upper_line_no}, terminal_code_line_end(code_editor.cursor.y) - upper_line_end)
             }
-            else
-            {
-                ordered_remove(&terminal_data.code, code_editor.cursor.y)
 
-                code_editor.cursor.y -= 1
-                code_editor.cursor.x = terminal_code_line_end(code_editor.cursor.y)
-                terminal_code_shift_screen(code_editor)
-                should_redraw = true    
-            }
+            // remove line
+            ordered_remove(&terminal_data.code, code_editor.cursor.y)
+
+            code_editor.cursor = cursor_position_after_deletion
+            should_redraw = true    
             
         }
     }
 
     // New line
-    if get_key_pressed() == .ENTER
+    if keyboard_state.key == .ENTER
     {
         inject_at(&terminal_data.code, code_editor.cursor.y + 1, empty_line)
+
+        terminal_code_copy_buffer(code_editor.cursor, {0, code_editor.cursor.y + 1}, terminal_code_line_end(code_editor.cursor.y) - code_editor.cursor.x)
+        slice.fill(terminal_data.code[code_editor.cursor.y][code_editor.cursor.x:], 0)
 
         terminal_reset_cell_color(terminal_code_relative_cursor_position())
         code_editor.cursor.y += 1
         code_editor.cursor.x = 0
 
-        terminal_code_shift_screen(code_editor)
         should_redraw = true
 
         code_editor.desired_cursor_x = 0
     }
 
+    // Double space
+    if keyboard_state.key == .TAB
+    {
+        terminal_reset_cell_color(terminal_code_relative_cursor_position())
+
+        if code_editor.cursor.x < CODELINE_SIZE - 1
+        {
+            terminal_code_insert(code_editor.cursor.x, code_editor.cursor.y, ' ')
+            terminal_code_insert(code_editor.cursor.x, code_editor.cursor.y, ' ')
+            code_editor.cursor.x += 2
+        } 
+        else if code_editor.cursor.x < CODELINE_SIZE
+        {
+            terminal_code_insert(code_editor.cursor.x, code_editor.cursor.y, ' ')
+            code_editor.cursor.x += 1
+        }
+
+        should_redraw = true
+    }
+
     // Move Cursor
-    if get_key_pressed() == .RIGHT
+    if keyboard_state.key == .RIGHT
     {
         terminal_reset_cell_color(terminal_code_relative_cursor_position())
         if code_editor.cursor.x < CODELINE_SIZE && code_editor.cursor.x < terminal_code_line_end(code_editor.cursor.y) 
         {
             code_editor.cursor.x += 1
+
+            if keyboard_state.is_ctrl_pressed
+            {
+                for code_editor.cursor.x < CODELINE_SIZE && terminal_data.code[code_editor.cursor.y][code_editor.cursor.x] > ' '
+                {
+                    code_editor.cursor.x += 1
+                }
+            }
         }
         else if code_editor.cursor.y < len(terminal_data.code) - 1 
         {
@@ -228,28 +256,34 @@ terminal_update_code_editor :: proc(code_editor : ^TerminalCodeEditor)
 
         code_editor.desired_cursor_x = code_editor.cursor.x
 
-        terminal_code_shift_screen(code_editor)
         should_redraw = true
     }
-    else if get_key_pressed() == .LEFT
+    else if keyboard_state.key == .LEFT
     {
         terminal_reset_cell_color(terminal_code_relative_cursor_position())
         if code_editor.cursor.x > 0 
         {
             code_editor.cursor.x -= 1
+
+            if keyboard_state.is_ctrl_pressed
+            {
+                for code_editor.cursor.x > 0 && terminal_data.code[code_editor.cursor.y][code_editor.cursor.x] > ' '
+                {
+                    code_editor.cursor.x -= 1
+                }
+            }
         }
         else if code_editor.cursor.y > 0
         {
-            code_editor.cursor.x = terminal_code_line_end(code_editor.cursor.y)
             code_editor.cursor.y -= 1
+            code_editor.cursor.x = terminal_code_line_end(code_editor.cursor.y)
         }
 
         code_editor.desired_cursor_x = code_editor.cursor.x
 
-        terminal_code_shift_screen(code_editor)
         should_redraw = true
     }
-    else if get_key_pressed() == .DOWN
+    else if keyboard_state.key == .DOWN
     {
         terminal_reset_cell_color(terminal_code_relative_cursor_position())
         if code_editor.cursor.y < len(terminal_data.code) - 1 
@@ -259,10 +293,9 @@ terminal_update_code_editor :: proc(code_editor : ^TerminalCodeEditor)
 
         code_editor.cursor.x = min(code_editor.desired_cursor_x, terminal_code_line_end(code_editor.cursor.y))
 
-        terminal_code_shift_screen(code_editor)
         should_redraw = true
     }
-    else if get_key_pressed() == .UP
+    else if keyboard_state.key == .UP
     {
         terminal_reset_cell_color(terminal_code_relative_cursor_position())
         if code_editor.cursor.y > 0 
@@ -272,17 +305,17 @@ terminal_update_code_editor :: proc(code_editor : ^TerminalCodeEditor)
         
         code_editor.cursor.x = min(code_editor.desired_cursor_x, terminal_code_line_end(code_editor.cursor.y))
 
-        terminal_code_shift_screen(code_editor)
         should_redraw = true
     }
 
     if should_redraw 
     {
+        terminal_code_shift_screen(code_editor)
         terminal_code_draw_all(code_editor.cursor, code_editor.top_left_position)
     }
 
     // Exit code editor
-    if get_key_pressed() == .ESCAPE
+    if keyboard_state.key == .ESCAPE
     {
         terminal_data.state = TerminalEntry {cursor = {0, TERMINAL_HEIGHT - 1}}
     }
