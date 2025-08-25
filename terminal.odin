@@ -27,6 +27,7 @@ TerminalMemoryEditor :: struct
     row_length : u8,
     top_left_index : int,
     cursor : [2]int,
+    last_cursor_blink : f64,
 }
 
 TerminalData :: struct

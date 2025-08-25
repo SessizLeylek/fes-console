@@ -18,9 +18,9 @@ terminal_memedit_draw_all :: proc(v : TerminalMemoryEditor)
             first_nibble := console_memory[memory_position] & 0b11110000 >> 4
             second_nibble := console_memory[memory_position] & 0b1111
 
-            terminal_data.chars[i][j * 2] = nibble_to_hex_ascii(first_nibble)
+            terminal_data.chars[i][j * 2] = 0
             terminal_data.char_colors[i][j * 2] = first_nibble << 4
-            terminal_data.chars[i][j * 2 + 1] = nibble_to_hex_ascii(second_nibble)
+            terminal_data.chars[i][j * 2 + 1] = 0
             terminal_data.char_colors[i][j * 2 + 1] = second_nibble << 4
             memory_position += 1
         }
@@ -37,6 +37,19 @@ terminal_update_memedit :: proc(memeditor : ^TerminalMemoryEditor)
         memeditor.is_initted = true
 
         should_redraw = true
+    }
+
+    // Cursor blink
+    if get_time() > memeditor.last_cursor_blink + CURSOR_BLINK_INTERVAL
+    {
+        memeditor.last_cursor_blink = get_time()
+        terminal_invert_cell_color(memeditor.cursor.x, memeditor.cursor.y)
+    }
+
+    // Move Cursor
+    if keyboard_state.key == .RIGHT
+    {
+        memeditor.cursor.x += 1
     }
 
     if should_redraw
